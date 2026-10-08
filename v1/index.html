@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Горизонт событий</title>
+<meta name="description" content="Настоящая чёрная дыра в браузере: каждый пиксель — луч света, искривлённый гравитацией. Прокрутите, чтобы упасть.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;600;800&family=Manrope:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000;
+    --ink:#f4ede4;
+    --muted:#a99f94;
+    --hot:#ffb067;
+    --hot2:#ff6a2b;
+    --glass:rgba(10,8,12,.42);
+    --line:rgba(255,200,150,.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:auto}
+  body{background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;overflow-x:hidden}
+  canvas#bh{position:fixed;inset:0;width:100vw;height:100vh;display:block;z-index:0}
+  #veil{position:fixed;inset:0;background:#000;z-index:1;pointer-events:none;opacity:0;transition:opacity .2s}
+  #boot{position:fixed;inset:0;background:#000;z-index:50;display:grid;place-items:center;transition:opacity 1.6s ease}
+  #boot p{font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase}
+  #boot.gone{opacity:0;pointer-events:none}
+
+  main{position:relative;z-index:2}
+  section{min-height:100vh;display:flex;align-items:center;padding:0 16px}
+  .hero{flex-direction:column;justify-content:center;text-align:center;min-height:100vh}
+  .hero h1{font-family:Unbounded,sans-serif;font-weight:800;font-size:clamp(40px,9vw,128px);line-height:.95;letter-spacing:-.02em;
+    background:linear-gradient(180deg,#fff 0%,#ffd7ae 55%,#ff8a3d 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 40px rgba(255,140,60,.35))}
+  .hero .kicker{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.4em;color:var(--hot);text-transform:uppercase;margin-bottom:22px}
+  .hero .lead{max-width:620px;margin:26px auto 0;font-size:clamp(16px,2vw,20px);line-height:1.55;color:#e8ddd0;text-shadow:0 2px 20px #000}
+  .scroll-hint{margin-top:48px;font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .scroll-hint i{width:1px;height:56px;background:linear-gradient(var(--hot),transparent);animation:drip 2s infinite}
+  @keyframes drip{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+  .card{max-width:460px;padding:30px 30px 28px;border:1px solid var(--line);border-radius:18px;background:var(--glass);
+    backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+    opacity:0;transform:translateY(40px);transition:opacity 1s ease,transform 1s cubic-bezier(.2,.8,.2,1)}
+  .card.on{opacity:1;transform:none}
+  section.right{justify-content:flex-end}
+  section.left{justify-content:flex-start}
+  @media(min-width:900px){section.left{padding-left:7vw}section.right{padding-right:7vw}}
+  .card .n{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--hot);letter-spacing:.25em}
+  .card h2{font-family:Unbounded,sans-serif;font-weight:600;font-size:clamp(24px,3vw,34px);line-height:1.1;margin:12px 0 14px}
+  .card p{color:#d9cec2;line-height:1.6;font-size:16px}
+  .card p+p{margin-top:12px}
+  .card b{color:var(--hot);font-weight:600}
+
+  /* HUD */
+  #hud{position:fixed;right:16px;bottom:16px;z-index:5;font-family:"JetBrains Mono",monospace;font-size:12px;
+    background:rgba(0,0,0,.5);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:260px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:opacity .6s}
+  #hud .row{display:flex;justify-content:space-between;gap:18px;padding:3px 0}
+  #hud .k{color:var(--muted)}
+  #hud .v{color:var(--ink);font-weight:700;text-align:right}
+  #hud .v.hot{color:var(--hot)}
+  #hud .bar{height:3px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:10px;overflow:hidden}
+  #hud .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--hot),var(--hot2))}
+  #hud .title{color:var(--hot);letter-spacing:.25em;font-size:10px;margin-bottom:8px}
+  @media(max-width:600px){#hud{left:16px;right:16px;min-width:0;font-size:11px;padding:10px 12px}}
+
+  #controls{position:fixed;left:16px;top:16px;z-index:5;display:flex;gap:8px}
+  #controls button{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink);background:rgba(0,0,0,.5);border:1px solid var(--line);
+    border-radius:999px;padding:9px 14px;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:border-color .3s,background .3s}
+  #controls button:hover{border-color:var(--hot)}
+  #controls button.on{background:rgba(255,140,60,.2);border-color:var(--hot)}
+  .drag-tip{position:fixed;left:50%;top:16px;transform:translateX(-50%);z-index:4;font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;transition:opacity 1s;pointer-events:none}
+  @media(max-width:600px){.drag-tip{display:none}}
+
+  /* inside */
+  #inside{position:fixed;inset:0;z-index:20;display:grid;place-items:center;text-align:center;padding:16px;opacity:0;pointer-events:none;transition:opacity 1.2s}
+  body.inside #inside{opacity:1;pointer-events:auto}
+  body.inside #hud,body.inside #controls,body.inside .drag-tip{opacity:0;pointer-events:none}
+  #inside .t{font-family:Unbounded,sans-serif;font-weight:300;font-size:clamp(22px,4vw,46px);line-height:1.3;max-width:900px;min-height:3.9em}
+  #inside .t .c{opacity:0;transition:opacity .4s}
+  #inside .t .c.v{opacity:1}
+  #inside .sub{margin-top:28px;color:var(--muted);font-size:16px;line-height:1.6;max-width:520px;margin-inline:auto;opacity:0;transition:opacity 2s 0s}
+  #inside.done .sub,#inside.done .back{opacity:1}
+  #inside .back{margin-top:36px;opacity:0;transition:opacity 2s .6s;font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+    color:#000;background:var(--hot);border:0;border-radius:999px;padding:14px 26px;cursor:pointer}
+  #inside .back:hover{background:#fff}
+  .spacer{height:100vh}
+  .flash{position:fixed;inset:0;z-index:30;background:#fff;opacity:0;pointer-events:none}
+  .flash.go{animation:flash 1.4s ease-out}
+  @keyframes flash{0%{opacity:0}8%{opacity:1}100%{opacity:0}}
+  @media (prefers-reduced-motion: reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="bh"></canvas>
+<div id="veil"></div>
+<div id="boot"><p>Включаем гравитацию…</p></div>
+<div class="flash" id="flash"></div>
+
+<div id="controls">
+  <button id="snd" type="button">♪ Звук</button>
+  <button id="spin" type="button" class="on">⟳ Вращение</button>
+</div>
+<div class="drag-tip" id="dragtip">Тяните мышью — облетите дыру</div>
+
+<div id="hud" aria-live="off">
+  <div class="title">ТЕЛЕМЕТРИЯ · СТРЕЛЕЦ A*</div>
+  <div class="row"><span class="k">До центра</span><span class="v" id="hDist">—</span></div>
+  <div class="row"><span class="k">В радиусах горизонта</span><span class="v" id="hRs">—</span></div>
+  <div class="row"><span class="k">1 ваша секунда =</span><span class="v hot" id="hDil">—</span></div>
+  <div class="row"><span class="k">Ваши часы</span><span class="v" id="hMe">00:00</span></div>
+  <div class="row"><span class="k">Часы Земли</span><span class="v hot" id="hEarth">00:00</span></div>
+  <div class="row"><span class="k">Вторая космическая</span><span class="v" id="hEsc">—</span></div>
+  <div class="bar"><i id="hBar"></i></div>
+</div>
+
+<main>
+  <section class="hero">
+    <div class="kicker">Это не видео</div>
+    <h1>ГОРИЗОНТ<br>СОБЫТИЙ</h1>
+    <p class="lead">Каждый пиксель на экране — луч света, который прямо сейчас летит мимо чёрной дыры и гнётся её гравитацией. Ваша видеокарта считает миллионы таких лучей 60 раз в секунду.</p>
+    <div class="scroll-hint">Крутите вниз, чтобы упасть<i></i></div>
+  </section>
+
+  <section class="left"><div class="card">
+    <div class="n">01 · ГДЕ МЫ</div>
+    <h2>Стрелец A*</h2>
+    <p>Перед вами чёрная дыра в центре нашей Галактики. Она весит как <b>4 миллиона Солнц</b>, а её горизонт больше орбиты Меркурия.</p>
+    <p>Справа внизу телеметрия. Следите за двумя часами: ваши и земные скоро начнут расходиться.</p>
+  </div></section>
+
+  <section class="right"><div class="card">
+    <div class="n">02 · ДИСК</div>
+    <h2>Огненный водоворот</h2>
+    <p>Светящееся кольцо — это <b>аккреционный диск</b>: газ, который падает в дыру по спирали и разогревается до миллионов градусов.</p>
+    <p>Заметили, что одна сторона ярче другой? Там газ летит <b>на вас</b> почти со скоростью света, и эффект Доплера усиливает его свечение.</p>
+  </div></section>
+
+  <section class="left"><div class="card">
+    <div class="n">03 · ЛИНЗА</div>
+    <h2>Диск, которого нет</h2>
+    <p>Дуга над дырой и дуга под ней — это не ещё два диска. Это <b>задняя сторона</b> того же самого диска.</p>
+    <p>Гравитация загибает свет оттуда вверх и вниз, и вы видите то, что физически скрыто за дырой. Звёзды вокруг тоже растягиваются в дуги.</p>
+  </div></section>
+
+  <section class="right"><div class="card">
+    <div class="n">04 · ФОТОННАЯ СФЕРА</div>
+    <h2>Свет ходит по кругу</h2>
+    <p>На 1,5 радиуса горизонта свет может лететь по <b>замкнутой орбите</b>. Тонкое яркое кольцо вокруг тени — это фотоны, которые облетели дыру один или несколько раз, прежде чем попасть вам в глаз.</p>
+    <p>Если бы вы стояли там, то увидели бы собственный затылок.</p>
+  </div></section>
+
+  <section class="left"><div class="card">
+    <div class="n">05 · ВРЕМЯ</div>
+    <h2>Время тянется</h2>
+    <p>Посмотрите на «Часы Земли». Чем ближе вы к горизонту, тем медленнее идёт ваше время относительно далёкой Земли.</p>
+    <p>Здесь <b>час</b> вашей жизни может стоить землянам <b>лет</b>. Как на планете Миллер в «Интерстеллар».</p>
+  </div></section>
+
+  <section class="right"><div class="card">
+    <div class="n">06 · ТОЧКА НЕВОЗВРАТА</div>
+    <h2>Дальше только вперёд</h2>
+    <p>Чтобы улететь отсюда, нужна скорость, близкая к скорости света. На горизонте нужна <b>больше скорости света</b>, а это невозможно.</p>
+    <p>Последний шанс повернуть назад. Или прокрутите ещё немного.</p>
+  </div></section>
+
+  <div class="spacer"></div>
+  <div class="spacer"></div>
+</main>
+
+<div id="inside">
+  <div>
+    <div class="t" id="insideText"></div>
+    <p class="sub">Вы пересекли горизонт событий. Отсюда не может выбраться даже свет. Для оставшихся на Земле вы навсегда застыли на краю тени, медленно краснея и угасая.</p>
+    <button class="back" id="back" type="button">Нарушить законы физики ↑</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('bh');
+const gl = canvas.getContext('webgl', {antialias:false, alpha:false, preserveDrawingBuffer:false, powerPreference:'high-performance'});
+const boot = document.getElementById('boot');
+if (!gl) { boot.querySelector('p').textContent = 'Ваш браузер не поддерживает WebGL'; return; }
+
+const VS = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
+const FS = `
+precision highp float;
+uniform vec2 uRes;
+uniform float uTime;
+uniform vec3 uCam, uFwd, uRight, uUp;
+uniform float uFov;
+
+float hash(vec3 p){p=fract(p*0.3183099+.1);p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float noise(vec3 x){
+  vec3 i=floor(x);vec3 f=fract(x);f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(hash(i+vec3(0,0,0)),hash(i+vec3(1,0,0)),f.x),
+                 mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),
+                 mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
+}
+float fbm(vec3 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*noise(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s;}
+
+vec3 stars(vec3 d, float scale, float thresh){
+  vec3 p=d*scale; vec3 id=floor(p); vec3 f=fract(p)-.5;
+  float h=hash(id);
+  if(h<thresh) return vec3(0);
+  vec3 off=(vec3(hash(id+3.1),hash(id+7.7),hash(id+1.3))-.5)*.5;
+  float dd=length(f-off);
+  float b=(h-thresh)/(1.0-thresh);
+  float tw=.75+.25*sin(uTime*(2.0+h*5.0)+h*40.0);
+  vec3 c=mix(vec3(.7,.8,1.),vec3(1.,.8,.6),hash(id+5.5));
+  return c*smoothstep(.12,0.,dd)*b*tw*2.5;
+}
+
+vec3 sky(vec3 d){
+  vec3 c=vec3(0.);
+  vec3 g=normalize(vec3(.35,1.,.15));
+  float band=exp(-pow(dot(d,g),2.0)*9.0);
+  float n=fbm(d*3.0+2.0);
+  float n2=fbm(d*6.0-5.0);
+  c+=vec3(.20,.10,.30)*pow(n,2.5)*band*1.4;
+  c+=vec3(.05,.12,.22)*pow(n2,3.0)*1.2;
+  c+=vec3(.35,.25,.18)*band*pow(n2,2.0)*.35;
+  c+=stars(d,70.,.9)*1.3;
+  c+=stars(d,160.,.94)*.9;
+  c+=stars(d,360.,.95)*.6*(.4+band*1.5);
+  return c;
+}
+
+vec3 heat(float t){
+  t=clamp(t,0.,1.);
+  return mix(mix(vec3(.6,.08,.01),vec3(1.,.45,.1),smoothstep(0.,.45,t)),vec3(1.,.93,.82),smoothstep(.45,1.,t));
+}
+
+vec4 disk(vec3 q, vec3 vdir){
+  float r=length(q.xz);
+  float rin=2.6, rout=13.0;
+  if(r<rin||r>rout) return vec4(0);
+  float ang=atan(q.z,q.x);
+  float om=pow(r,-1.5);
+  float a=ang-uTime*om*2.2;
+  vec3 np=vec3(cos(a)*1.6,sin(a)*1.6,r*1.8);
+  float n=fbm(np*1.3+vec3(0.,0.,uTime*.05));
+  float rings=.72+.28*sin(r*5.0+fbm(np*2.0)*9.0);
+  float prof=pow(r/rin,-1.6)*(1.0-sqrt(rin/r)*.85);
+  float edge=smoothstep(rin,rin+.35,r)*smoothstep(rout,rout-4.0,r);
+  float dens=clamp(n*rings*1.7,0.,1.)*edge;
+  // doppler beaming
+  vec3 vel=sqrt(.5/r)*vec3(-sin(ang),0.,cos(ang));
+  float beta=length(vel);
+  float gam=1.0/sqrt(1.0-beta*beta);
+  float D=1.0/(gam*(1.0-dot(vel,-vdir)));
+  float grav=sqrt(max(1.0-1.0/r,0.));
+  float boost=pow(D*grav,3.5);
+  float temp=prof*2.2*D*grav;
+  vec3 col=heat(temp)*boost*(prof*1.3+.04)*dens*14.0;
+  col=mix(col,col*vec3(.75,.85,1.25),clamp((D-1.)*1.5,0.,1.));
+  return vec4(col,dens*.92);
+}
+
+void main(){
+  vec2 uv=(gl_FragCoord.xy-.5*uRes)/uRes.y;
+  vec3 rd=normalize(uFwd+uv.x*uFov*uRight+uv.y*uFov*uUp);
+  vec3 p=uCam; vec3 v=rd;
+  vec3 h=cross(p,v); float h2=dot(h,h);
+  vec3 col=vec3(0.); float T=1.0; bool hole=false;
+  for(int i=0;i<320;i++){
+    float r=length(p);
+    float dt=clamp(.045*r,.012,1.6);
+    vec3 acc=-1.5*h2*p/pow(r,5.0);
+    v+=acc*dt;
+    vec3 pn=p+v*dt;
+    if(p.y*pn.y<0.0){
+      vec3 q=mix(p,pn,p.y/(p.y-pn.y));
+      vec4 dc=disk(q,normalize(v));
+      col+=T*dc.rgb;
+      T*=1.0-dc.a;
+      if(T<.02)break;
+    }
+    p=pn;
+    if(dot(p,p)<1.0){hole=true;break;}
+    if(r>70.0)break;
+  }
+  if(!hole) col+=T*sky(normalize(v));
+  col=1.0-exp(-col*1.15);
+  col=pow(col,vec3(.9));
+  float vig=1.0-.35*dot(uv,uv);
+  col*=vig;
+  col+=(hash(vec3(gl_FragCoord.xy,uTime))-.5)*.025;
+  gl_FragColor=vec4(col,1.);
+}`;
+
+function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ console.error(gl.getShaderInfoLog(s)); boot.querySelector('p').textContent='Ошибка шейдера'; throw new Error(gl.getShaderInfoLog(s)); } return s; }
+const prog=gl.createProgram();
+gl.attachShader(prog,sh(gl.VERTEX_SHADER,VS)); gl.attachShader(prog,sh(gl.FRAGMENT_SHADER,FS));
+gl.linkProgram(prog); gl.useProgram(prog);
+const buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+const loc=gl.getAttribLocation(prog,'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+const U={}; ['uRes','uTime','uCam','uFwd','uRight','uUp','uFov'].forEach(n=>U[n]=gl.getUniformLocation(prog,n));
+
+// adaptive resolution
+let scale = Math.min(window.devicePixelRatio||1, 1) * (innerWidth<700 ? .6 : .8);
+function resize(){
+  canvas.width=Math.max(2,Math.round(innerWidth*scale));
+  canvas.height=Math.max(2,Math.round(innerHeight*scale));
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+addEventListener('resize',resize); resize();
+
+// state
+const params = new URLSearchParams(location.search);
+let az=0.9, azVel=0, autoSpin=true;
+let dist=30, elev=.32;
+let progress=0;
+let dragging=false, lastX=0, lastY=0, elevOff=0;
+
+function targetFromScroll(){
+  const max=document.documentElement.scrollHeight-innerHeight;
+  progress = params.has('p') ? parseFloat(params.get('p')) : (max>0 ? Math.min(1,Math.max(0,scrollY/max)) : 0);
+  let d;
+  const a=.86;
+  if(progress<a) d=32*Math.pow(3.4/32,progress/a);
+  else { const t=(progress-a)/(1-a); d=1+2.4*Math.pow(.00008/2.4,Math.min(1,t/.85)); }
+  const e=.30-.20*Math.min(1,progress/a);
+  return {d,e};
+}
+
+if(params.has('p')){ const t=targetFromScroll(); dist=t.d; elev=t.e; }
+if(params.has('clean')){ document.querySelectorAll('main,#hud,#controls,.drag-tip,#boot').forEach(e=>e.style.display='none'); }
+
+addEventListener('pointerdown',e=>{ if(e.target.closest('button,a')) return; if(e.pointerType==='mouse'){dragging=true;lastX=e.clientX;lastY=e.clientY;} });
+addEventListener('pointerup',()=>dragging=false);
+addEventListener('pointermove',e=>{
+  if(!dragging) return;
+  azVel=(e.clientX-lastX)*-.004; az+=azVel;
+  elevOff=Math.max(-.5,Math.min(.6,elevOff+(e.clientY-lastY)*.003));
+  lastX=e.clientX; lastY=e.clientY;
+  document.getElementById('dragtip').style.opacity=0;
+});
+let tx=null;
+addEventListener('touchstart',e=>{tx=e.touches[0].clientX;},{passive:true});
+addEventListener('touchmove',e=>{ if(tx==null) return; const x=e.touches[0].clientX; az+=(x-tx)*-.005; tx=x; },{passive:true});
+
+const spinBtn=document.getElementById('spin');
+spinBtn.onclick=()=>{autoSpin=!autoSpin; spinBtn.classList.toggle('on',autoSpin);};
+
+// cards reveal
+const io=new IntersectionObserver(es=>es.forEach(en=>{ if(en.isIntersecting) en.target.classList.add('on'); }),{threshold:.35});
+document.querySelectorAll('.card').forEach(c=>io.observe(c));
+
+// ---------- sound ----------
+let ac=null, master, osc1, osc2, filt, noiseGain;
+const sndBtn=document.getElementById('snd');
+function startSound(){
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  master=ac.createGain(); master.gain.value=0; master.connect(ac.destination);
+  filt=ac.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=400; filt.Q.value=6; filt.connect(master);
+  osc1=ac.createOscillator(); osc1.type='sawtooth'; osc1.frequency.value=55;
+  osc2=ac.createOscillator(); osc2.type='sine'; osc2.frequency.value=55.7;
+  const g1=ac.createGain(); g1.gain.value=.12; const g2=ac.createGain(); g2.gain.value=.5;
+  osc1.connect(g1).connect(filt); osc2.connect(g2).connect(filt);
+  const len=ac.sampleRate*2, nb=ac.createBuffer(1,len,ac.sampleRate), ch=nb.getChannelData(0);
+  let last=0; for(let i=0;i<len;i++){ last=(last+.02*(Math.random()*2-1))/1.02; ch[i]=last*3.5; }
+  const ns=ac.createBufferSource(); ns.buffer=nb; ns.loop=true;
+  noiseGain=ac.createGain(); noiseGain.gain.value=.6; ns.connect(noiseGain).connect(filt);
+  const lfo=ac.createOscillator(); lfo.frequency.value=.13; const lg=ac.createGain(); lg.gain.value=120; lfo.connect(lg).connect(filt.frequency);
+  osc1.start(); osc2.start(); ns.start(); lfo.start();
+  master.gain.setTargetAtTime(.5,ac.currentTime,1.5);
+}
+sndBtn.onclick=()=>{
+  if(!ac){ startSound(); sndBtn.classList.add('on'); return; }
+  if(ac.state==='running'){ ac.suspend(); sndBtn.classList.remove('on'); } else { ac.resume(); sndBtn.classList.add('on'); }
+};
+function updateSound(d){
+  if(!ac||ac.state!=='running') return;
+  const k=Math.min(1,Math.max(0,1-Math.log(d)/Math.log(30)));
+  const t=ac.currentTime;
+  osc1.frequency.setTargetAtTime(55-28*k,t,.3);
+  osc2.frequency.setTargetAtTime(55.7-28.3*k+k*1.5,t,.3);
+  filt.frequency.setTargetAtTime(220+900*k,t,.3);
+  master.gain.setTargetAtTime(document.body.classList.contains('inside')?0:.35+.45*k,t,.4);
+}
+
+// ---------- HUD ----------
+const RS_KM=1.2e7;
+const $=id=>document.getElementById(id);
+let myT=0, earthT=0;
+function fmtKm(km){
+  if(km>=1e9) return (km/1e9).toFixed(2).replace('.',',')+' млрд км';
+  if(km>=1e6) return (km/1e6).toFixed(1).replace('.',',')+' млн км';
+  return Math.round(km).toLocaleString('ru-RU')+' км';
+}
+function fmtTime(s){
+  if(s<3600){const m=Math.floor(s/60),x=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}
+  if(s<86400*2) return (s/3600).toFixed(1).replace('.',',')+' ч';
+  if(s<86400*365*2) return Math.floor(s/86400).toLocaleString('ru-RU')+' дн';
+  return (s/86400/365.25).toFixed(1).replace('.',',')+' лет';
+}
+function fmtDil(f){
+  if(f<1.01) return '1,00 с';
+  const s=f;
+  if(s<120) return s.toFixed(2).replace('.',',')+' с';
+  if(s<7200) return (s/60).toFixed(1).replace('.',',')+' мин';
+  return (s/3600).toFixed(1).replace('.',',')+' ч';
+}
+
+// ---------- inside ----------
+let inside=false, typing=null;
+const insideEl=$('inside'), insideText=$('insideText');
+const PHRASE='Здесь кончается всё, что можно увидеть.';
+function enterInside(){
+  if(inside) return; inside=true;
+  document.body.classList.add('inside');
+  const fl=$('flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
+  insideText.innerHTML=[...PHRASE].map(c=>`<span class="c">${c===' '?'&nbsp;':c}</span>`).join('');
+  const cs=insideText.querySelectorAll('.c'); let i=0;
+  clearInterval(typing);
+  typing=setInterval(()=>{ if(i<cs.length){cs[i++].classList.add('v');} else {clearInterval(typing); insideEl.classList.add('done');} },70);
+}
+function leaveInside(){
+  if(!inside) return; inside=false;
+  document.body.classList.remove('inside'); insideEl.classList.remove('done'); clearInterval(typing);
+}
+$('back').onclick=()=>{
+  leaveInside();
+  myT=0; earthT=0;
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+
+// ---------- loop ----------
+const veil=$('veil');
+let last=performance.now(), t0=last, frames=0, acc=0, booted=false;
+function frame(now){
+  const dt=Math.min(.1,(now-last)/1000); last=now;
+  const tg=targetFromScroll();
+  const k=1-Math.pow(.02,dt);
+  // approach in log space so the final plunge is smooth
+  dist=Math.exp(Math.log(dist)+(Math.log(tg.d)-Math.log(dist))*k);
+  elev+=(tg.e-elev)*k;
+  if(autoSpin&&!dragging) az+=dt*.05;
+  if(!dragging){ az+=azVel; azVel*=.92; }
+  const el=Math.max(-1.3,Math.min(1.3,elev+elevOff));
+
+  const cam=[dist*Math.cos(el)*Math.cos(az), dist*Math.sin(el), dist*Math.cos(el)*Math.sin(az)];
+  const len=Math.hypot(...cam);
+  const fwd=cam.map(c=>-c/len);
+  let right=[ -fwd[2], 0, fwd[0] ]; // cross(fwd, worldUp)
+  const rl=Math.hypot(...right)||1; right=right.map(c=>c/rl);
+  const up=[ right[1]*fwd[2]-right[2]*fwd[1], right[2]*fwd[0]-right[0]*fwd[2], right[0]*fwd[1]-right[1]*fwd[0] ];
+  const fov=.9+Math.max(0,8-dist)*.09;
+
+  gl.uniform2f(U.uRes,canvas.width,canvas.height);
+  gl.uniform1f(U.uTime,(now-t0)/1000);
+  gl.uniform3fv(U.uCam,cam); gl.uniform3fv(U.uFwd,fwd); gl.uniform3fv(U.uRight,right); gl.uniform3fv(U.uUp,up);
+  gl.uniform1f(U.uFov,fov);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+
+  // HUD
+  const dil=1/Math.sqrt(Math.max(1e-9,1-1/dist));
+  if(!inside){ myT+=dt; earthT+=dt*dil; }
+  $('hDist').textContent=fmtKm(dist*RS_KM);
+  $('hRs').textContent=dist.toFixed(dist<1.1?4:2).replace('.',',');
+  $('hDil').textContent=fmtDil(dil)+' Земли';
+  $('hMe').textContent=fmtTime(myT);
+  $('hEarth').textContent=fmtTime(earthT);
+  const vesc=Math.sqrt(1/dist);
+  $('hEsc').textContent=Math.round(vesc*100)+'% c';
+  $('hBar').style.width=(progress*100).toFixed(1)+'%';
+
+  // plunge
+  const plunge=Math.max(0,Math.min(1,(1.004-dist)/(1.004-1.0002)));
+  veil.style.opacity=plunge.toFixed(3);
+  if(dist<1.0004 && progress>.97) enterInside();
+  else if(progress<.9) leaveInside();
+
+  updateSound(dist);
+
+  // adaptive resolution
+  frames++; acc+=dt;
+  if(acc>1.2){
+    const fps=frames/acc; frames=0; acc=0;
+    if(fps<40&&scale>.35){scale*=.85;resize();}
+    else if(fps>58&&scale<Math.min(1,devicePixelRatio||1)){scale=Math.min(1,scale*1.1);resize();}
+  }
+  if(!booted&&now-t0>400){booted=true;boot.classList.add('gone');}
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+setTimeout(()=>{ $('dragtip').style.opacity=0; },9000);
+})();
+</script>
+</body>
+</html>
