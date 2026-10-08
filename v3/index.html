@@ -1,0 +1,997 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Горизонт событий</title>
+<meta name="description" content="Настоящая чёрная дыра в браузере: каждый пиксель — луч света, искривлённый гравитацией. Прокрутите, чтобы упасть.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;600;800&family=Manrope:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000;
+    --ink:#f4ede4;
+    --muted:#a99f94;
+    --hot:#ffb067;
+    --hot2:#ff6a2b;
+    --ice:#8fb8ff;
+    --glass:rgba(10,8,12,.42);
+    --line:rgba(255,200,150,.18);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  [hidden]{display:none!important}
+  body{background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,sans-serif;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+  canvas#bh{position:fixed;left:0;top:0;width:100vw;height:100vh;height:100lvh;display:block;z-index:0}
+  body.lensing{touch-action:none}
+  @media(pointer:coarse){body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
+  #veil{position:fixed;inset:0;background:#000;z-index:1;pointer-events:none;opacity:0}
+  #boot{position:fixed;inset:0;background:#000;z-index:50;display:grid;place-items:center;transition:opacity 1.6s ease}
+  #boot p{font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase}
+  #boot.gone{opacity:0;pointer-events:none}
+
+  main{position:relative;z-index:2}
+  section{min-height:100vh;min-height:100svh;display:flex;align-items:center;padding:0 16px}
+  .hero{flex-direction:column;justify-content:center;text-align:center;min-height:100vh;min-height:100svh}
+  .pill i{font-style:normal}
+  @media(max-width:600px){
+    .hero{padding-top:64px;padding-bottom:110px}
+    .hero h1{font-size:clamp(34px,11.5vw,60px)}
+    .hero .lead{font-size:15px;margin-top:20px}
+    .hero .try{gap:8px}
+    .hero .try span{font-size:11px;padding:6px 11px}
+    .scroll-hint{margin-top:28px}
+    section:not(.hero){align-items:flex-end;padding-bottom:calc(130px + env(safe-area-inset-bottom))}
+    .card{padding:22px 20px 20px;border-radius:16px}
+    .card p{font-size:15px}
+    .pill .lb{display:none}
+    .pill{padding:10px 13px;font-size:14px}
+  }
+  .hero h1{font-family:Unbounded,sans-serif;font-weight:800;font-size:clamp(40px,9vw,128px);line-height:.95;letter-spacing:-.02em;
+    filter:drop-shadow(0 0 40px rgba(255,140,60,.35))}
+  .hero h1 .ln{display:block;white-space:nowrap}
+  .hero h1 .ch{display:inline-block;will-change:transform,opacity,filter;
+    background:linear-gradient(180deg,#fff 0%,#ffd7ae 55%,#ff8a3d 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero .kicker{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.4em;color:var(--hot);text-transform:uppercase;margin-bottom:22px}
+  .hero .lead{max-width:620px;margin:26px auto 0;font-size:clamp(16px,2vw,20px);line-height:1.55;color:#e8ddd0;text-shadow:0 2px 20px #000}
+  .hero .try{margin-top:22px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .hero .try span{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 13px;background:rgba(0,0,0,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .hero .try b{color:var(--hot);font-weight:700}
+  .scroll-hint{margin-top:44px;font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .scroll-hint i{width:1px;height:56px;background:linear-gradient(var(--hot),transparent);animation:drip 2s infinite}
+  @keyframes drip{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+  .card{max-width:460px;padding:30px 30px 28px;border:1px solid var(--line);border-radius:18px;background:var(--glass);
+    backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);
+    opacity:0;transform:translateY(40px) scale(.96);transition:opacity 1s ease,transform 1s cubic-bezier(.2,.8,.2,1);position:relative;overflow:hidden}
+  .card::before{content:"";position:absolute;inset:0;background:radial-gradient(400px circle at var(--mx,50%) var(--my,50%),rgba(255,170,100,.14),transparent 45%);pointer-events:none}
+  .card.on{opacity:1;transform:none}
+  section.right{justify-content:flex-end}
+  section.left{justify-content:flex-start}
+  @media(min-width:900px){section.left{padding-left:7vw}section.right{padding-right:7vw}}
+  .card .n{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--hot);letter-spacing:.25em}
+  .card h2{font-family:Unbounded,sans-serif;font-weight:600;font-size:clamp(24px,3vw,34px);line-height:1.1;margin:12px 0 14px}
+  .card p{color:#d9cec2;line-height:1.6;font-size:16px}
+  .card p+p{margin-top:12px}
+  .card b{color:var(--hot);font-weight:600}
+  .card.ice .n,.card.ice b{color:var(--ice)}
+  .card.ice{border-color:rgba(140,180,255,.25)}
+
+  /* HUD */
+  #hud{position:fixed;right:16px;bottom:16px;z-index:5;font-family:"JetBrains Mono",monospace;font-size:12px;
+    background:rgba(0,0,0,.5);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:270px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:opacity .6s}
+  #hud.shake{animation:shake .5s}
+  @keyframes shake{0%,100%{transform:none}20%{transform:translate(-4px,2px)}40%{transform:translate(4px,-2px)}60%{transform:translate(-3px,-1px)}80%{transform:translate(2px,1px)}}
+  #hud .row{display:flex;justify-content:space-between;gap:18px;padding:3px 0}
+  #hud .k{color:var(--muted)}
+  #hud .v{color:var(--ink);font-weight:700;text-align:right}
+  #hud .v.hot{color:var(--hot)}
+  #hud .v.ice{color:var(--ice)}
+  #hud .bar{height:3px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:10px;overflow:hidden}
+  #hud .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--hot),var(--hot2))}
+  #hud .title{color:var(--hot);letter-spacing:.25em;font-size:10px;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px}
+  #hud .title .rec{color:#ff4d4d;animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.2}}
+  #hud .more{display:none;color:var(--muted)}
+  @media(max-width:600px){
+    #hud{left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));min-width:0;font-size:11px;padding:10px 12px;cursor:pointer}
+    #hud:not(.open) .row:not(.m){display:none}
+    #hud .more{display:inline}
+    #hud.open .more{transform:rotate(180deg);display:inline-block}
+  }
+  #lensRing{position:fixed;z-index:3;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;pointer-events:none;
+    border:1px solid rgba(255,190,130,.5);box-shadow:0 0 30px rgba(255,150,80,.35),inset 0 0 30px rgba(255,150,80,.25);opacity:0;transform:scale(.4);transition:opacity .3s,transform .3s}
+  #lensRing.on{opacity:1;transform:scale(1)}
+  #qrBox{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  #qrBox.open{display:grid}
+  #qrBox .in{background:#0d0a0c;border:1px solid var(--line);border-radius:20px;padding:26px;text-align:center;max-width:320px;margin:16px}
+  #qrBox h3{font-family:Unbounded,sans-serif;font-weight:600;font-size:20px;margin-bottom:6px}
+  #qrBox p{color:var(--muted);font-size:14px;line-height:1.5;margin-bottom:16px}
+  #qr{background:#fff;padding:12px;border-radius:12px;display:inline-block}
+  #qr img,#qr canvas{display:block;width:200px;height:200px}
+  @media(pointer:coarse){#qrBtn{display:none}}
+
+  #controls{position:fixed;left:16px;top:16px;z-index:6;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100vw - 32px)}
+  .pill{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink);background:rgba(0,0,0,.5);border:1px solid var(--line);
+    border-radius:999px;padding:9px 14px;cursor:pointer;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:border-color .3s,background .3s;text-decoration:none}
+  .pill:hover{border-color:var(--hot)}
+  .pill.on{background:rgba(255,140,60,.2);border-color:var(--hot)}
+  #fxPanel{position:fixed;left:16px;top:62px;z-index:6;background:rgba(0,0,0,.72);border:1px solid var(--line);border-radius:16px;padding:12px;
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:grid;gap:6px;min-width:230px;
+    opacity:0;transform:translateY(-8px);pointer-events:none;transition:opacity .25s,transform .25s}
+  #fxPanel.open{opacity:1;transform:none;pointer-events:auto}
+  #fxPanel label{display:flex;justify-content:space-between;align-items:center;gap:14px;font-family:"JetBrains Mono",monospace;font-size:12px;cursor:pointer;padding:6px 6px;border-radius:8px}
+  #fxPanel label:hover{background:rgba(255,255,255,.05)}
+  #fxPanel input{accent-color:var(--hot);width:16px;height:16px}
+  #fxPanel .vers{border-top:1px solid var(--line);margin-top:4px;padding-top:10px;display:flex;gap:6px;align-items:center;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--muted)}
+  #fxPanel .vers a{color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:4px 10px;text-decoration:none}
+  #fxPanel .vers a.cur{border-color:var(--hot);color:var(--hot)}
+
+  .drag-tip{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:4;font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;transition:opacity 1s;pointer-events:none;white-space:nowrap}
+  @media(max-width:900px){.drag-tip{display:none}}
+  @media(max-width:600px){#fxPanel{right:12px;left:12px;top:60px;min-width:0}#controls{left:12px;top:calc(12px + env(safe-area-inset-top))}}
+
+  #toast{position:fixed;left:50%;top:22%;transform:translate(-50%,0);z-index:7;font-family:Unbounded,sans-serif;font-weight:600;font-size:clamp(16px,2.4vw,26px);
+    color:var(--ice);text-shadow:0 0 30px rgba(120,170,255,.8);pointer-events:none;opacity:0;letter-spacing:.04em;text-align:center;padding:0 16px}
+  #toast.go{animation:toast 2.2s ease-out}
+  @keyframes toast{0%{opacity:0;transform:translate(-50%,10px) scale(.9)}15%{opacity:1;transform:translate(-50%,0) scale(1)}70%{opacity:1}100%{opacity:0;transform:translate(-50%,-14px)}}
+
+  /* inside */
+  #inside{position:fixed;inset:0;z-index:20;display:grid;place-items:center;text-align:center;padding:16px;opacity:0;pointer-events:none;transition:opacity 1.2s}
+  #insideFx{position:absolute;inset:0;width:100%;height:100%}
+  #inside>div{position:relative}
+  body.inside #inside{opacity:1;pointer-events:auto}
+  body.inside #hud,body.inside #controls,body.inside .drag-tip,body.inside #fxPanel{opacity:0;pointer-events:none}
+  #inside .t{font-family:Unbounded,sans-serif;font-weight:300;font-size:clamp(22px,4vw,46px);line-height:1.3;max-width:900px;min-height:3.9em}
+  #inside .t .c{opacity:0;display:inline-block;transform:translateY(.4em) scale(1.6);filter:blur(8px);transition:opacity .5s,transform .7s cubic-bezier(.2,.8,.2,1),filter .7s}
+  #inside .t .c.v{opacity:1;transform:none;filter:none}
+  #inside .sub{margin-top:28px;color:var(--muted);font-size:16px;line-height:1.6;max-width:520px;margin-inline:auto;opacity:0;transition:opacity 2s}
+  #inside.done .sub,#inside.done .back{opacity:1}
+  #inside .back{margin-top:36px;opacity:0;transition:opacity 2s .6s,background .3s;font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.2em;text-transform:uppercase;
+    color:#000;background:var(--hot);border:0;border-radius:999px;padding:14px 26px;cursor:pointer;box-shadow:0 0 40px rgba(255,140,60,.5)}
+  #inside .back:hover{background:#fff}
+  .spacer{height:100vh}
+  .flash{position:fixed;inset:0;z-index:30;background:#fff;opacity:0;pointer-events:none}
+  .flash.go{animation:flash 1.4s ease-out}
+  @keyframes flash{0%{opacity:0}8%{opacity:1}100%{opacity:0}}
+  @media (prefers-reduced-motion: reduce){.card{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="bh"></canvas>
+<div id="veil"></div>
+<div id="boot"><p>Включаем гравитацию…</p></div>
+<div class="flash" id="flash"></div>
+<div id="toast"></div>
+
+<div id="controls">
+  <button class="pill" id="snd" type="button" aria-label="Звук"><i>♪</i> <span class="lb">Звук</span></button>
+  <button class="pill on" id="spin" type="button" aria-label="Вращение"><i>⟳</i> <span class="lb">Вращение</span></button>
+  <button class="pill" id="tiltBtn" type="button" aria-label="Наклон" hidden><i>📱</i> <span class="lb">Наклон</span></button>
+  <button class="pill" id="fxBtn" type="button" aria-label="Эффекты"><i>✦</i> <span class="lb">Эффекты</span></button>
+  <button class="pill" id="qrBtn" type="button"><i>▣</i> <span class="lb">На телефон</span></button>
+</div>
+<div id="lensRing"></div>
+<div id="qrBox"><div class="in">
+  <h3>Открыть на телефоне</h3>
+  <p>Наведите камеру на код. На телефоне можно наклонять экран, чтобы облетать дыру, и зажимать палец, чтобы гнуть свет.</p>
+  <div id="qr"></div>
+</div></div>
+<div id="fxPanel">
+  <label>Свечение (bloom)<input type="checkbox" data-fx="bloom" checked></label>
+  <label>Джеты из полюсов<input type="checkbox" data-fx="jets" checked></label>
+  <label>Звезда на орбите<input type="checkbox" data-fx="star" checked></label>
+  <label>Горячие пятна в диске<input type="checkbox" data-fx="spots" checked></label>
+  <label>Курсор-линза<input type="checkbox" data-fx="lens" checked></label>
+  <label>Варп и аберрация<input type="checkbox" data-fx="warp" checked></label>
+  <div class="vers">Версия: <a href="/event-horizon/v1/">v1</a><a href="/event-horizon/v2/">v2</a><a class="cur" href="/event-horizon/v3/">v3</a></div>
+</div>
+<div class="drag-tip" id="dragtip">Тяните — облетите · Клик — гравитационная волна</div>
+
+<div id="hud" aria-live="off">
+  <div class="title"><span>ТЕЛЕМЕТРИЯ · СТРЕЛЕЦ A*</span><span><span class="rec">● LIVE</span> <span class="more">▴</span></span></div>
+  <div class="row m"><span class="k">До центра</span><span class="v" id="hDist">—</span></div>
+  <div class="row"><span class="k">В радиусах горизонта</span><span class="v" id="hRs">—</span></div>
+  <div class="row m"><span class="k">1 ваша секунда =</span><span class="v hot" id="hDil">—</span></div>
+  <div class="row"><span class="k">Ваши часы</span><span class="v" id="hMe">00:00</span></div>
+  <div class="row m"><span class="k">Часы Земли</span><span class="v hot" id="hEarth">00:00</span></div>
+  <div class="row"><span class="k">Вторая космическая</span><span class="v" id="hEsc">—</span></div>
+  <div class="row"><span class="k">Грав. волн отправлено</span><span class="v ice" id="hWaves">0</span></div>
+  <div class="row"><span class="k">Лучей в секунду</span><span class="v" id="hRays">—</span></div>
+  <div class="bar"><i id="hBar"></i></div>
+</div>
+
+<main>
+  <section class="hero">
+    <div class="kicker">Это не видео</div>
+    <h1 id="title"><span class="ln">ГОРИЗОНТ</span><span class="ln">СОБЫТИЙ</span></h1>
+    <p class="lead">Каждый пиксель на экране — луч света, который прямо сейчас летит мимо чёрной дыры и гнётся её гравитацией. Ваша видеокарта считает миллионы таких лучей 60 раз в секунду.</p>
+    <div class="try" id="tryDesk"><span><b>Курсор</b> тоже гнёт свет</span><span><b>Клик</b> — гравитационная волна</span><span><b>Тяни</b> — облёт</span></div>
+    <div class="try" id="tryTouch" hidden><span><b>Тап</b> — волна</span><span><b>Зажми палец</b> — линза</span><span><b>Наклони</b> телефон</span></div>
+    <div class="scroll-hint">Крутите вниз, чтобы упасть<i></i></div>
+  </section>
+
+  <section class="left"><div class="card">
+    <div class="n">01 · ГДЕ МЫ</div>
+    <h2>Стрелец A*</h2>
+    <p>Перед вами чёрная дыра в центре нашей Галактики. Она весит как <b>4 миллиона Солнц</b>, а её горизонт больше орбиты Меркурия.</p>
+    <p>Справа внизу телеметрия. Следите за двумя часами: ваши и земные скоро начнут расходиться.</p>
+  </div></section>
+
+  <section class="right"><div class="card">
+    <div class="n">02 · ДИСК</div>
+    <h2>Огненный водоворот</h2>
+    <p>Светящееся кольцо — это <b>аккреционный диск</b>: газ, который падает в дыру по спирали и разогревается до миллионов градусов. Яркие сгустки в нём — горячие пятна, которые облетают дыру за минуты.</p>
+    <p>Одна сторона ярче другой: там газ летит <b>на вас</b> почти со скоростью света, и эффект Доплера усиливает свечение.</p>
+  </div></section>
+
+  <section class="left"><div class="card">
+    <div class="n">03 · ЛИНЗА</div>
+    <h2>Диск, которого нет</h2>
+    <p>Дуга над дырой и дуга под ней — это не ещё два диска. Это <b>задняя сторона</b> того же самого диска.</p>
+    <p>Подождите, пока голубая звезда уйдёт <b>за дыру</b>: её свет обогнёт тень с двух сторон и растянется в дугу или даже в кольцо Эйнштейна.</p>
+  </div></section>
+
+  <section class="right"><div class="card ice">
+    <div class="n">04 · ДЖЕТЫ</div>
+    <h2>Струи из полюсов</h2>
+    <p>Голубые лучи сверху и снизу — это <b>джеты</b>, потоки плазмы, которые магнитное поле выстреливает почти со скоростью света. У некоторых дыр они длиннее целой галактики.</p>
+    <p>Их свет тоже искривляется: присмотритесь, как джет изгибается возле тени.</p>
+  </div></section>
+
+  <section class="left"><div class="card">
+    <div class="n">05 · ФОТОННАЯ СФЕРА</div>
+    <h2>Свет ходит по кругу</h2>
+    <p>На 1,5 радиуса горизонта свет может лететь по <b>замкнутой орбите</b>. Тонкое яркое кольцо вокруг тени — это фотоны, которые облетели дыру один или несколько раз, прежде чем попасть вам в глаз.</p>
+    <p>Если бы вы стояли там, то увидели бы собственный затылок.</p>
+  </div></section>
+
+  <section class="right"><div class="card ice">
+    <div class="n">06 · ВОЛНЫ</div>
+    <h2>Рябь пространства</h2>
+    <p>Кликните или тапните в любое место. Побежит <b>гравитационная волна</b>: само пространство сожмётся и растянется.</p>
+    <p>В 2015 году детектор LIGO впервые поймал такую волну от слияния двух чёрных дыр. Она шла до нас <b>1,3 миллиарда лет</b>.</p>
+  </div></section>
+
+  <section class="left"><div class="card">
+    <div class="n">07 · ВРЕМЯ</div>
+    <h2>Время тянется</h2>
+    <p>Посмотрите на «Часы Земли». Чем ближе вы к горизонту, тем медленнее идёт ваше время относительно далёкой Земли.</p>
+    <p>Здесь <b>час</b> вашей жизни может стоить землянам <b>лет</b>. Как на планете Миллер в «Интерстеллар».</p>
+  </div></section>
+
+  <section class="right"><div class="card">
+    <div class="n">08 · ТОЧКА НЕВОЗВРАТА</div>
+    <h2>Дальше только вперёд</h2>
+    <p>Чтобы улететь отсюда, нужна скорость, близкая к скорости света. На горизонте нужна <b>больше скорости света</b>, а это невозможно.</p>
+    <p>Последний шанс повернуть назад. Или прокрутите ещё немного.</p>
+  </div></section>
+
+  <div class="spacer"></div>
+  <div class="spacer"></div>
+</main>
+
+<div id="inside">
+  <canvas id="insideFx"></canvas>
+  <div>
+    <div class="t" id="insideText"></div>
+    <p class="sub">Вы пересекли горизонт событий. Отсюда не может выбраться даже свет. Для оставшихся на Земле вы навсегда застыли на краю тени, медленно краснея и угасая.</p>
+    <button class="back" id="back" type="button">Нарушить законы физики ↑</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('bh');
+const gl = canvas.getContext('webgl', {antialias:false, alpha:false, preserveDrawingBuffer:false, powerPreference:'high-performance'});
+const boot = document.getElementById('boot');
+if (!gl) { boot.querySelector('p').textContent = 'Ваш браузер не поддерживает WebGL'; return; }
+
+const VS = `attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}`;
+
+// ---------- scene: ray-traced black hole ----------
+const FS_SCENE = `
+precision highp float;
+uniform vec2 uRes;
+uniform float uTime;
+uniform vec3 uCam, uFwd, uRight, uUp;
+uniform float uFov;
+uniform vec3 uStar;
+uniform float uStarOn, uJet, uSpots;
+uniform vec3 uMouse;
+uniform vec3 uRip[4];
+uniform float uSteps;
+uniform float uOffY;
+
+float hash(vec3 p){p=fract(p*0.3183099+.1);p*=17.0;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
+float noise(vec3 x){
+  vec3 i=floor(x);vec3 f=fract(x);f=f*f*(3.0-2.0*f);
+  return mix(mix(mix(hash(i+vec3(0,0,0)),hash(i+vec3(1,0,0)),f.x),
+                 mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),
+                 mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
+}
+float fbm(vec3 p){float a=.5,s=0.;for(int i=0;i<5;i++){s+=a*noise(p);p=p*2.03+vec3(1.7,9.2,3.1);a*=.5;}return s;}
+
+vec3 stars(vec3 d, float scale, float thresh){
+  vec3 p=d*scale; vec3 id=floor(p); vec3 f=fract(p)-.5;
+  float h=hash(id);
+  if(h<thresh) return vec3(0);
+  vec3 off=(vec3(hash(id+3.1),hash(id+7.7),hash(id+1.3))-.5)*.5;
+  float dd=length(f-off);
+  float b=(h-thresh)/(1.0-thresh);
+  float tw=.75+.25*sin(uTime*(2.0+h*5.0)+h*40.0);
+  vec3 c=mix(vec3(.7,.8,1.),vec3(1.,.8,.6),hash(id+5.5));
+  return c*smoothstep(.12,0.,dd)*b*tw*2.5;
+}
+
+vec3 sky(vec3 d){
+  vec3 c=vec3(0.);
+  vec3 g=normalize(vec3(.35,1.,.15));
+  float band=exp(-pow(dot(d,g),2.0)*9.0);
+  float n=fbm(d*3.0+2.0);
+  float n2=fbm(d*6.0-5.0);
+  c+=vec3(.20,.10,.30)*pow(n,2.5)*band*1.4;
+  c+=vec3(.05,.12,.22)*pow(n2,3.0)*1.2;
+  c+=vec3(.35,.25,.18)*band*pow(n2,2.0)*.35;
+  c+=stars(d,70.,.9)*1.3;
+  c+=stars(d,160.,.94)*.9;
+  c+=stars(d,360.,.95)*.6*(.4+band*1.5);
+  return c;
+}
+
+vec3 heat(float t){
+  t=clamp(t,0.,1.);
+  return mix(mix(vec3(.6,.08,.01),vec3(1.,.45,.1),smoothstep(0.,.45,t)),vec3(1.,.93,.82),smoothstep(.45,1.,t));
+}
+
+vec4 disk(vec3 q, vec3 vdir){
+  float r=length(q.xz);
+  float rin=2.6, rout=13.0;
+  if(r<rin||r>rout) return vec4(0);
+  float ang=atan(q.z,q.x);
+  float om=pow(r,-1.5);
+  float a=ang-uTime*om*2.2;
+  vec3 np=vec3(cos(a)*1.6,sin(a)*1.6,r*1.8);
+  float n=fbm(np*1.3+vec3(0.,0.,uTime*.05));
+  float rings=.72+.28*sin(r*5.0+fbm(np*2.0)*9.0);
+  float prof=pow(r/rin,-1.6)*(1.0-sqrt(rin/r)*.85);
+  float edge=smoothstep(rin,rin+.35,r)*smoothstep(rout,rout-4.0,r);
+  float spot=0.;
+  if(uSpots>0.){
+    for(int k=0;k<4;k++){
+      float fk=float(k);
+      float rs=3.6+fk*1.9;
+      float as=uTime*pow(rs,-1.5)*2.2+fk*2.4;
+      vec2 sp=rs*vec2(cos(as),sin(as));
+      vec2 dd=q.xz-sp;
+      // stretch spots along the orbit (shear)
+      vec2 tn=vec2(-sin(as),cos(as));
+      float along=dot(dd,tn), across=dot(dd,sp/rs);
+      spot+=exp(-along*along*1.2-across*across*9.0)*(1.4-fk*.2);
+    }
+    spot*=uSpots;
+  }
+  float dens=clamp(n*rings*1.7+spot*.8,0.,1.)*edge;
+  vec3 vel=sqrt(.5/r)*vec3(-sin(ang),0.,cos(ang));
+  float beta=length(vel);
+  float gam=1.0/sqrt(1.0-beta*beta);
+  float D=1.0/(gam*(1.0-dot(vel,-vdir)));
+  float grav=sqrt(max(1.0-1.0/r,0.));
+  float boost=pow(D*grav,3.5);
+  float temp=prof*2.2*D*grav+spot*.5;
+  vec3 col=heat(temp)*boost*(prof*1.3+.04)*dens*14.0*(1.0+spot*1.5);
+  col=mix(col,col*vec3(.75,.85,1.25),clamp((D-1.)*1.5,0.,1.));
+  return vec4(col,dens*.92);
+}
+
+void main(){
+  vec2 uv=(gl_FragCoord.xy-.5*uRes)/uRes.y;
+  // gravitational waves
+  for(int i=0;i<4;i++){
+    vec3 rp=uRip[i]; float age=uTime-rp.z;
+    if(age>0.0&&age<3.5){
+      vec2 dv=uv-rp.xy; float d=length(dv)+1e-4;
+      float front=age*.75;
+      float env=exp(-pow((d-front)*7.0,2.0))*exp(-age*1.1);
+      uv+=dv/d*env*.045*sin((d-front)*45.0);
+    }
+  }
+  // cursor = tiny point lens
+  if(uMouse.z>0.0){
+    vec2 dm=uv-uMouse.xy; float l2=dot(dm,dm)+1e-7;
+    float E2=uMouse.z*uMouse.z;
+    if(l2<E2*.3){ gl_FragColor=vec4(0,0,0,1); return; }
+    uv-=dm*E2/l2;
+  }
+  uv.y+=uOffY;
+  vec3 rd=normalize(uFwd+uv.x*uFov*uRight+uv.y*uFov*uUp);
+  vec3 p=uCam; vec3 v=rd;
+  vec3 h=cross(p,v); float h2=dot(h,h);
+  vec3 col=vec3(0.); float T=1.0; bool hole=false;
+  for(int i=0;i<340;i++){
+    if(float(i)>=uSteps)break;
+    float r=length(p);
+    float dt=clamp(.045*r,.012,1.6);
+    vec3 ds=p-uStar; float d2=dot(ds,ds);
+    if(uStarOn>0.) dt=min(dt,max(.04,sqrt(d2)*.45));
+    // orbiting star (gets lensed like everything else)
+    if(uStarOn>0.){
+      col+=T*(vec3(.85,.92,1.)*exp(-d2*28.0)*5.0+vec3(.4,.6,1.)*.012/(d2+.04))*dt*uStarOn;
+    }
+    // polar jets
+    if(uJet>0.){
+      float ay=abs(p.y);
+      if(ay>1.3&&ay<45.0){
+        float rxz2=dot(p.xz,p.xz);
+        float w=.18+ay*.05;
+        float j=exp(-rxz2/(w*w));
+        if(j>.002){
+          float pulse=.55+.45*sin(ay*1.3-uTime*7.0)*sin(ay*.37-uTime*2.3+1.0);
+          float core=exp(-rxz2/(w*w*.12));
+          col+=T*(vec3(.30,.50,1.)*j+vec3(.8,.9,1.)*core*.6)*pulse*exp(-ay*.055)*smoothstep(1.3,3.5,ay)*dt*.55*uJet;
+        }
+      }
+    }
+    vec3 acc=-1.5*h2*p/pow(r,5.0);
+    v+=acc*dt;
+    vec3 pn=p+v*dt;
+    if(p.y*pn.y<0.0){
+      vec3 q=mix(p,pn,p.y/(p.y-pn.y));
+      vec4 dc=disk(q,normalize(v));
+      col+=T*dc.rgb;
+      T*=1.0-dc.a;
+      if(T<.02)break;
+    }
+    p=pn;
+    if(dot(p,p)<1.0){hole=true;break;}
+    if(r>70.0)break;
+  }
+  if(!hole) col+=T*sky(normalize(v));
+  col=1.0-exp(-col*1.15);
+  col=pow(col,vec3(.9));
+  gl_FragColor=vec4(col,1.);
+}`;
+
+// ---------- post: bright pass ----------
+const FS_BRIGHT = `
+precision mediump float;
+uniform sampler2D uTex; uniform vec2 uRes;
+void main(){
+  vec2 uv=gl_FragCoord.xy/uRes;
+  vec2 px=.5/uRes;
+  vec3 c=(texture2D(uTex,uv+vec2(-px.x,-px.y)).rgb+texture2D(uTex,uv+vec2(px.x,-px.y)).rgb+
+          texture2D(uTex,uv+vec2(-px.x,px.y)).rgb+texture2D(uTex,uv+vec2(px.x,px.y)).rgb)*.25;
+  float l=max(c.r,max(c.g,c.b));
+  gl_FragColor=vec4(c*smoothstep(.42,.95,l),1.);
+}`;
+// ---------- post: separable gaussian ----------
+const FS_BLUR = `
+precision mediump float;
+uniform sampler2D uTex; uniform vec2 uRes; uniform vec2 uDir;
+void main(){
+  vec2 uv=gl_FragCoord.xy/uRes;
+  vec2 o=uDir/uRes;
+  vec3 c=texture2D(uTex,uv).rgb*.227;
+  c+=(texture2D(uTex,uv+o*1.385).rgb+texture2D(uTex,uv-o*1.385).rgb)*.316;
+  c+=(texture2D(uTex,uv+o*3.231).rgb+texture2D(uTex,uv-o*3.231).rgb)*.070;
+  gl_FragColor=vec4(c,1.);
+}`;
+// ---------- post: composite ----------
+const FS_COMP = `
+precision mediump float;
+uniform sampler2D uScene, uBloom; uniform vec2 uRes;
+uniform float uTime, uCA, uRad, uBloomK, uPlunge;
+float h(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void main(){
+  vec2 uv=gl_FragCoord.xy/uRes;
+  vec2 c=uv-.5;
+  vec3 col=vec3(0.); float tot=0.;
+  for(int i=0;i<10;i++){
+    float f=float(i)/9.0;
+    float s=1.0-uRad*f;
+    float w=1.0-f*.7;
+    col.r+=texture2D(uScene,.5+c*s*(1.0+uCA)).r*w;
+    col.g+=texture2D(uScene,.5+c*s).g*w;
+    col.b+=texture2D(uScene,.5+c*s*(1.0-uCA)).b*w;
+    tot+=w;
+  }
+  col/=tot;
+  vec3 b=texture2D(uBloom,uv).rgb;
+  col+=b*uBloomK;
+  col=col/(1.0+max(col-1.0,0.)*.5);
+  float vig=1.0-.5*dot(c*vec2(uRes.x/uRes.y,1.),c*vec2(uRes.x/uRes.y,1.))*(1.0+uPlunge*3.0);
+  col*=clamp(vig,0.,1.);
+  col+=(h(gl_FragCoord.xy+fract(uTime)*91.7)-.5)*.03;
+  gl_FragColor=vec4(col,1.);
+}`;
+
+function sh(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ console.error(gl.getShaderInfoLog(s)); boot.querySelector('p').textContent='Ошибка шейдера'; throw new Error(gl.getShaderInfoLog(s)); } return s; }
+function program(fs, names){
+  const pr=gl.createProgram();
+  gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS)); gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));
+  gl.bindAttribLocation(pr,0,'p'); gl.linkProgram(pr);
+  const u={}; names.forEach(n=>u[n]=gl.getUniformLocation(pr,n));
+  return {pr,u};
+}
+const P_SCENE=program(FS_SCENE,['uRes','uTime','uCam','uFwd','uRight','uUp','uFov','uStar','uStarOn','uJet','uSpots','uMouse','uRip','uSteps','uOffY']);
+const P_BRIGHT=program(FS_BRIGHT,['uTex','uRes']);
+const P_BLUR=program(FS_BLUR,['uTex','uRes','uDir']);
+const P_COMP=program(FS_COMP,['uScene','uBloom','uRes','uTime','uCA','uRad','uBloomK','uPlunge']);
+
+const buf=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+
+function makeTarget(w,h){
+  const tex=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,tex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  const fb=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  return {tex,fb,w,h};
+}
+function freeTarget(t){ if(!t) return; gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
+
+// adaptive resolution
+const touch = matchMedia('(pointer:coarse)').matches || /[?&]touch/.test(location.search);
+const STEPS = touch ? 230 : 340;
+const MIN_SCALE = touch ? .3 : .35;
+let scale = Math.min(window.devicePixelRatio||1, 1) * (touch ? .5 : innerWidth<700 ? .6 : .8);
+let tScene, tA, tB, lastW=0, lastH=0;
+function onResize(){
+  // mobile address bar show/hide changes height a little on every scroll: ignore it
+  if(canvas.clientWidth===lastW && Math.abs(canvas.clientHeight-lastH)<160) return;
+  resize();
+}
+function resize(){
+  lastW=canvas.clientWidth||innerWidth; lastH=canvas.clientHeight||innerHeight;
+  canvas.width=Math.max(2,Math.round(lastW*scale));
+  canvas.height=Math.max(2,Math.round(lastH*scale));
+  freeTarget(tScene); freeTarget(tA); freeTarget(tB);
+  tScene=makeTarget(canvas.width,canvas.height);
+  const bw=Math.max(2,canvas.width>>2), bh=Math.max(2,canvas.height>>2);
+  tA=makeTarget(bw,bh); tB=makeTarget(bw,bh);
+  layoutTitle();
+}
+addEventListener('resize',onResize);
+
+// ---------- state ----------
+const params = new URLSearchParams(location.search);
+const fx={bloom:true,jets:true,star:true,spots:true,lens:true,warp:true};
+let az=0.9, azVel=0, autoSpin=true;
+let dist=140, elev=.32;
+let progress=0;
+let dragging=false, lastX=0, lastY=0, elevOff=0, downX=0, downY=0, moved=0;
+let mouse={x:0,y:0,str:0,target:0};
+const ripples=[]; let waves=0;
+
+function targetFromScroll(){
+  const max=document.documentElement.scrollHeight-innerHeight;
+  progress = params.has('p') ? parseFloat(params.get('p')) : (max>0 ? Math.min(1,Math.max(0,scrollY/max)) : 0);
+  let d;
+  const a=.86;
+  if(progress<a) d=32*Math.pow(3.4/32,progress/a);
+  else { const t=(progress-a)/(1-a); d=1+2.4*Math.pow(.00008/2.4,Math.min(1,t/.85)); }
+  const e=.30-.20*Math.min(1,progress/a);
+  return {d,e};
+}
+if(params.has('p')){ const t=targetFromScroll(); dist=t.d; elev=t.e; }
+if(params.has('clean')){ document.querySelectorAll('main,#hud,#controls,.drag-tip,#boot').forEach(e=>e.style.display='none'); }
+
+const $=id=>document.getElementById(id);
+function toUV(x,y){ const w=canvas.clientWidth||innerWidth, h=canvas.clientHeight||innerHeight; return [(x-w/2)/h, (h/2-y)/h]; }
+function buzz(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(_){} }
+const UI_SEL='button,a,label,#fxPanel,#hud,#inside,#qrBox';
+
+addEventListener('pointerdown',e=>{
+  if(e.target.closest(UI_SEL)) return;
+  downX=e.clientX; downY=e.clientY; moved=0;
+  if(e.pointerType==='mouse'){dragging=true;lastX=e.clientX;lastY=e.clientY;}
+});
+addEventListener('pointerup',e=>{
+  const wasDrag=dragging; dragging=false;
+  if(e.target.closest(UI_SEL)||lensTouch) return;
+  if(Math.hypot(e.clientX-downX,e.clientY-downY)<6 && (wasDrag||e.pointerType!=='mouse')) fireWave(e.clientX,e.clientY);
+});
+addEventListener('pointermove',e=>{
+  if(e.pointerType==='mouse'){
+    const [u,v]=toUV(e.clientX,e.clientY); mouse.x=u; mouse.y=v; mouse.target=1;
+  }
+  if(!dragging) return;
+  azVel=(e.clientX-lastX)*-.004; az+=azVel;
+  elevOff=Math.max(-.5,Math.min(.6,elevOff+(e.clientY-lastY)*.003));
+  lastX=e.clientX; lastY=e.clientY;
+  $('dragtip').style.opacity=0;
+});
+document.addEventListener('mouseleave',()=>mouse.target=0);
+// ---------- touch: swipe sideways = orbit, long-press = lens under the finger ----------
+let ts=null, lpTimer=null, lensTouch=false, lensSize=.06;
+const lensRing=$('lensRing');
+function setLens(x,y){
+  const [u,v]=toUV(x,y); mouse.x=u; mouse.y=v; mouse.target=1;
+  lensRing.style.left=x+'px'; lensRing.style.top=y+'px';
+}
+addEventListener('touchstart',e=>{
+  if(e.target.closest(UI_SEL)||e.touches.length>1) return;
+  const t=e.touches[0]; ts={x:t.clientX,y:t.clientY,lx:t.clientX,cx:t.clientX,cy:t.clientY,axis:null};
+  clearTimeout(lpTimer);
+  lpTimer=setTimeout(()=>{
+    if(!ts) return;
+    lensTouch=true; lensSize=.09; document.body.classList.add('lensing');
+    setLens(ts.cx,ts.cy); mouse.str=.3; lensRing.classList.add('on'); buzz(20);
+  },380);
+},{passive:true});
+addEventListener('touchmove',e=>{
+  if(!ts) return;
+  const t=e.touches[0]; ts.cx=t.clientX; ts.cy=t.clientY;
+  if(lensTouch){ e.preventDefault(); setLens(t.clientX,t.clientY); return; }
+  const dx=t.clientX-ts.x, dy=t.clientY-ts.y;
+  if(Math.hypot(dx,dy)>8) clearTimeout(lpTimer);
+  if(!ts.axis&&Math.hypot(dx,dy)>10) ts.axis=Math.abs(dx)>Math.abs(dy)*1.3?'x':'y';
+  if(ts.axis==='x'){ az+=(t.clientX-ts.lx)*-.006; }
+  ts.lx=t.clientX;
+},{passive:false});
+function endTouch(){
+  clearTimeout(lpTimer); ts=null;
+  if(lensTouch){
+    setTimeout(()=>{ lensTouch=false; },50);
+    document.body.classList.remove('lensing'); mouse.target=0; lensRing.classList.remove('on');
+  }
+}
+addEventListener('touchend',endTouch); addEventListener('touchcancel',endTouch);
+
+// ---------- tilt the phone to orbit ----------
+let tiltOn=false, tiltBase=null, tiltAz=0, tiltEl=0, tiltAzS=0, tiltElS=0;
+const tiltBtn=$('tiltBtn');
+function onOrient(e){
+  if(e.beta==null||e.gamma==null) return;
+  if(!tiltBase) tiltBase={b:e.beta,g:e.gamma};
+  tiltAz=Math.max(-1,Math.min(1,(e.gamma-tiltBase.g)/35))*1.1;
+  tiltEl=Math.max(-1,Math.min(1,(e.beta-tiltBase.b)/35))*.45;
+}
+async function enableTilt(){
+  try{
+    if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+      if(await DeviceOrientationEvent.requestPermission()!=='granted') return;
+    }
+  }catch(_){ return; }
+  tiltBase=null; addEventListener('deviceorientation',onOrient); tiltOn=true; tiltBtn.classList.add('on');
+}
+if(touch&&'DeviceOrientationEvent' in window){
+  tiltBtn.hidden=false;
+  tiltBtn.onclick=()=>{
+    if(tiltOn){ tiltOn=false; removeEventListener('deviceorientation',onOrient); tiltBtn.classList.remove('on'); tiltAz=tiltEl=0; return; }
+    enableTilt();
+  };
+  // Android needs no permission: turn it on right away
+  if(typeof DeviceOrientationEvent.requestPermission!=='function') enableTilt();
+}
+if(touch){ $('tryDesk').hidden=true; $('tryTouch').hidden=false; }
+
+// ---------- HUD expands on tap (phones) ----------
+$('hud').addEventListener('click',()=>{ if(innerWidth<=600) $('hud').classList.toggle('open'); });
+
+// ---------- QR code to open on a phone ----------
+const qrBox=$('qrBox');
+$('qrBtn').onclick=()=>{
+  qrBox.classList.add('open');
+  if($('qr').childElementCount) return;
+  const url=location.hostname.endsWith('github.io')?location.origin+'/event-horizon/':location.href;
+  const s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
+  s.onload=()=>new QRCode($('qr'),{text:url,width:200,height:200,colorDark:'#000',colorLight:'#fff'});
+  s.onerror=()=>{ $('qr').textContent=url; };
+  document.head.appendChild(s);
+};
+qrBox.onclick=e=>{ if(e.target===qrBox) qrBox.classList.remove('open'); };
+
+// light that follows the cursor inside cards
+document.querySelectorAll('.card').forEach(c=>c.addEventListener('pointermove',e=>{
+  const r=c.getBoundingClientRect(); c.style.setProperty('--mx',(e.clientX-r.left)+'px'); c.style.setProperty('--my',(e.clientY-r.top)+'px');
+}));
+
+const spinBtn=$('spin');
+spinBtn.onclick=()=>{autoSpin=!autoSpin; spinBtn.classList.toggle('on',autoSpin);};
+const fxBtn=$('fxBtn'), fxPanel=$('fxPanel');
+fxBtn.onclick=()=>{ const o=fxPanel.classList.toggle('open'); fxBtn.classList.toggle('on',o); };
+fxPanel.querySelectorAll('input[data-fx]').forEach(i=>i.onchange=()=>{ fx[i.dataset.fx]=i.checked; });
+if(!location.pathname.includes('/event-horizon/')) fxPanel.querySelector('.vers').style.display='none';
+
+// cards reveal
+const io=new IntersectionObserver(es=>es.forEach(en=>{ if(en.isIntersecting) en.target.classList.add('on'); }),{threshold:.35});
+document.querySelectorAll('.card').forEach(c=>io.observe(c));
+
+// ---------- title that spirals into the hole ----------
+const title=$('title');
+title.querySelectorAll('.ln').forEach(ln=>{ ln.innerHTML=[...ln.textContent].map(ch=>`<span class="ch">${ch}</span>`).join(''); });
+const letters=[...title.querySelectorAll('.ch')];
+let letterBase=[];
+function layoutTitle(){
+  letters.forEach(l=>l.style.transform='none');
+  const sy=scrollY;
+  letterBase=letters.map(l=>{ const r=l.getBoundingClientRect(); return {x:r.left+r.width/2, y:r.top+r.height/2+sy}; });
+}
+function updateTitle(){
+  const s=Math.min(1,Math.max(0,scrollY/(innerHeight*.75)));
+  if(s===0&&updateTitle.last===0) return;
+  updateTitle.last=s;
+  const cx=innerWidth/2, cy=innerHeight/2;
+  letters.forEach((l,i)=>{
+    const b=letterBase[i]; if(!b) return;
+    const x0=b.x-cx, y0=b.y-scrollY-cy;
+    const e=Math.pow(s,1.4);
+    const r0=Math.hypot(x0,y0), a0=Math.atan2(y0,x0);
+    const a=a0+e*(2.2+ (i%3)*.4), r=r0*(1-e*.96);
+    const tx=cx+Math.cos(a)*r-(b.x), ty=cy+Math.sin(a)*r-(b.y-scrollY);
+    const sc=1-e*.85;
+    l.style.transform=`translate(${tx.toFixed(1)}px,${ty.toFixed(1)}px) rotate(${(e*(a-a0)*57).toFixed(1)}deg) scale(${sc.toFixed(3)},${(sc*(1+e*1.5)).toFixed(3)})`;
+    l.style.opacity=(1-e*e).toFixed(3);
+    l.style.filter=e>0.01?`blur(${(e*6).toFixed(1)}px)`:'none';
+  });
+}
+
+// ---------- sound ----------
+let ac=null, master, osc1, osc2, filt, noiseBuf;
+const sndBtn=$('snd');
+function startSound(){
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  master=ac.createGain(); master.gain.value=0; master.connect(ac.destination);
+  filt=ac.createBiquadFilter(); filt.type='lowpass'; filt.frequency.value=400; filt.Q.value=6; filt.connect(master);
+  osc1=ac.createOscillator(); osc1.type='sawtooth'; osc1.frequency.value=55;
+  osc2=ac.createOscillator(); osc2.type='sine'; osc2.frequency.value=55.7;
+  const g1=ac.createGain(); g1.gain.value=.12; const g2=ac.createGain(); g2.gain.value=.5;
+  osc1.connect(g1).connect(filt); osc2.connect(g2).connect(filt);
+  const len=ac.sampleRate*2; noiseBuf=ac.createBuffer(1,len,ac.sampleRate); const ch=noiseBuf.getChannelData(0);
+  let last=0; for(let i=0;i<len;i++){ last=(last+.02*(Math.random()*2-1))/1.02; ch[i]=last*3.5; }
+  const ns=ac.createBufferSource(); ns.buffer=noiseBuf; ns.loop=true;
+  const ng=ac.createGain(); ng.gain.value=.6; ns.connect(ng).connect(filt);
+  const lfo=ac.createOscillator(); lfo.frequency.value=.13; const lg=ac.createGain(); lg.gain.value=120; lfo.connect(lg).connect(filt.frequency);
+  osc1.start(); osc2.start(); ns.start(); lfo.start();
+  master.gain.setTargetAtTime(.5,ac.currentTime,1.5);
+}
+function waveSound(){
+  if(!ac||ac.state!=='running') return;
+  const t=ac.currentTime;
+  // LIGO-style chirp: rising tone, then a thump
+  const o=ac.createOscillator(); o.type='sine';
+  o.frequency.setValueAtTime(40,t); o.frequency.exponentialRampToValueAtTime(380,t+.45); o.frequency.exponentialRampToValueAtTime(60,t+.7);
+  const g=ac.createGain(); g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(.35,t+.4); g.gain.exponentialRampToValueAtTime(.001,t+1.2);
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t+1.3);
+  const n=ac.createBufferSource(); n.buffer=noiseBuf;
+  const f=ac.createBiquadFilter(); f.type='lowpass'; f.frequency.setValueAtTime(900,t+.45); f.frequency.exponentialRampToValueAtTime(60,t+1.6);
+  const ng=ac.createGain(); ng.gain.setValueAtTime(0,t+.44); ng.gain.linearRampToValueAtTime(1.2,t+.47); ng.gain.exponentialRampToValueAtTime(.001,t+1.8);
+  n.connect(f).connect(ng).connect(ac.destination); n.start(t+.44); n.stop(t+1.9);
+}
+sndBtn.onclick=()=>{
+  if(!ac){ startSound(); sndBtn.classList.add('on'); return; }
+  if(ac.state==='running'){ ac.suspend(); sndBtn.classList.remove('on'); } else { ac.resume(); sndBtn.classList.add('on'); }
+};
+function updateSound(d){
+  if(!ac||ac.state!=='running') return;
+  const k=Math.min(1,Math.max(0,1-Math.log(d)/Math.log(30)));
+  const t=ac.currentTime;
+  osc1.frequency.setTargetAtTime(55-28*k,t,.3);
+  osc2.frequency.setTargetAtTime(55.7-28.3*k+k*1.5,t,.3);
+  filt.frequency.setTargetAtTime(220+900*k,t,.3);
+  master.gain.setTargetAtTime(document.body.classList.contains('inside')?0:.35+.45*k,t,.4);
+}
+
+// ---------- gravitational waves ----------
+const toastEl=$('toast');
+const WAVE_MSG=['Гравитационная волна!','LIGO засёк сигнал','Пространство дрогнуло','Ещё одна волна!','Слияние дыр зафиксировано'];
+let simTime=0;
+function fireWave(x,y){
+  const [u,v]=toUV(x,y);
+  ripples.unshift([u,v,simTime]); ripples.length=Math.min(ripples.length,4);
+  waves++; $('hWaves').textContent=waves;
+  const hud=$('hud'); hud.classList.remove('shake'); void hud.offsetWidth; hud.classList.add('shake');
+  toastEl.textContent=WAVE_MSG[(waves-1)%WAVE_MSG.length];
+  toastEl.classList.remove('go'); void toastEl.offsetWidth; toastEl.classList.add('go');
+  kick=1;
+  buzz([30,40,60]);
+  waveSound();
+}
+let kick=0;
+
+// ---------- HUD ----------
+const RS_KM=1.2e7;
+let myT=0, earthT=0;
+function fmtKm(km){
+  if(km>=1e9) return (km/1e9).toFixed(2).replace('.',',')+' млрд км';
+  if(km>=1e6) return (km/1e6).toFixed(1).replace('.',',')+' млн км';
+  return Math.round(km).toLocaleString('ru-RU')+' км';
+}
+function fmtTime(s){
+  if(s<3600){const m=Math.floor(s/60),x=Math.floor(s%60);return String(m).padStart(2,'0')+':'+String(x).padStart(2,'0');}
+  if(s<86400*2) return (s/3600).toFixed(1).replace('.',',')+' ч';
+  if(s<86400*365*2) return Math.floor(s/86400).toLocaleString('ru-RU')+' дн';
+  return (s/86400/365.25).toFixed(1).replace('.',',')+' лет';
+}
+function fmtDil(f){
+  if(f<1.01) return '1,00 с';
+  if(f<120) return f.toFixed(2).replace('.',',')+' с';
+  if(f<7200) return (f/60).toFixed(1).replace('.',',')+' мин';
+  return (f/3600).toFixed(1).replace('.',',')+' ч';
+}
+function fmtBig(n){
+  if(n>=1e9) return (n/1e9).toFixed(1).replace('.',',')+' млрд';
+  if(n>=1e6) return (n/1e6).toFixed(0)+' млн';
+  return Math.round(n).toLocaleString('ru-RU');
+}
+
+// ---------- inside ----------
+let inside=false, typing=null;
+const insideEl=$('inside'), insideText=$('insideText');
+const PHRASE='Здесь кончается всё, что можно увидеть.';
+const ifx=$('insideFx'), ictx=ifx.getContext('2d');
+let streaks=[];
+function enterInside(){
+  if(inside) return; inside=true;
+  document.body.classList.add('inside');
+  buzz([80,60,200]);
+  const fl=$('flash'); fl.classList.remove('go'); void fl.offsetWidth; fl.classList.add('go');
+  insideText.innerHTML=PHRASE.split(' ').map(w=>`<span style="white-space:nowrap">${[...w].map(c=>`<span class="c">${c}</span>`).join('')}</span>`).join(' ');
+  const cs=insideText.querySelectorAll('.c'); let i=0;
+  clearInterval(typing);
+  typing=setInterval(()=>{ if(i<cs.length){cs[i++].classList.add('v');} else {clearInterval(typing); insideEl.classList.add('done');} },60);
+  ifx.width=innerWidth; ifx.height=innerHeight;
+  streaks=Array.from({length:260},()=>({a:Math.random()*Math.PI*2,r:Math.random()*Math.max(innerWidth,innerHeight),s:.3+Math.random()*1.2,h:Math.random()}));
+}
+function leaveInside(){
+  if(!inside) return; inside=false;
+  document.body.classList.remove('inside'); insideEl.classList.remove('done'); clearInterval(typing);
+}
+function drawInside(dt){
+  // matter streaming inward toward the singularity
+  ictx.fillStyle='rgba(0,0,0,.18)'; ictx.fillRect(0,0,ifx.width,ifx.height);
+  const cx=ifx.width/2, cy=ifx.height/2;
+  ictx.lineCap='round';
+  for(const s of streaks){
+    const r0=s.r;
+    s.r-=s.r*dt*s.s*.9+dt*20; s.a+=dt*s.s*1.4*(200/(s.r+60));
+    if(s.r<4){ s.r=Math.max(ifx.width,ifx.height)*(.6+Math.random()*.4); s.a=Math.random()*Math.PI*2; continue; }
+    const x0=cx+Math.cos(s.a-.05)*r0, y0=cy+Math.sin(s.a-.05)*r0;
+    const x1=cx+Math.cos(s.a)*s.r, y1=cy+Math.sin(s.a)*s.r;
+    const k=Math.min(1,s.r/(ifx.width*.5));
+    ictx.strokeStyle=s.h<.75?`rgba(255,${(140+100*(1-k))|0},${(60+120*(1-k))|0},${(.15+.5*(1-k)).toFixed(2)})`:`rgba(140,180,255,${(.2+.5*(1-k)).toFixed(2)})`;
+    ictx.lineWidth=1+(1-k)*1.5;
+    ictx.beginPath(); ictx.moveTo(x0,y0); ictx.lineTo(x1,y1); ictx.stroke();
+  }
+}
+$('back').onclick=()=>{
+  leaveInside();
+  myT=0; earthT=0;
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+
+// ---------- loop ----------
+const veil=$('veil');
+const bootAt=performance.now();
+let offY=0;
+let last=bootAt, frames=0, acc=0, booted=false, logDistPrev=Math.log(dist), speedS=0;
+function pass(target){ gl.bindFramebuffer(gl.FRAMEBUFFER,target?target.fb:null); gl.viewport(0,0,target?target.w:canvas.width,target?target.h:canvas.height); gl.drawArrays(gl.TRIANGLES,0,3); }
+function bindTex(unit,tex){ gl.activeTexture(gl.TEXTURE0+unit); gl.bindTexture(gl.TEXTURE_2D,tex); }
+
+function frame(now){
+  const dt=Math.min(.1,(now-last)/1000); last=now; simTime+=dt;
+  const tg=targetFromScroll();
+  const k=1-Math.pow(booted?.02:.25,dt);
+  dist=Math.exp(Math.log(dist)+(Math.log(tg.d)-Math.log(dist))*k);
+  elev+=(tg.e-elev)*k;
+  if(autoSpin&&!dragging) az+=dt*.05;
+  if(!dragging){ az+=azVel; azVel*=.92; }
+  // camera shake: near the horizon, and from gravitational waves
+  kick*=Math.pow(.05,dt);
+  const shake=Math.max(0,3.5-dist)*.004+kick*.02;
+  const jx=(Math.random()-.5)*shake, jy=(Math.random()-.5)*shake;
+  tiltAzS+=(tiltAz-tiltAzS)*Math.min(1,dt*5); tiltElS+=(tiltEl-tiltElS)*Math.min(1,dt*5);
+  const el=Math.max(-1.3,Math.min(1.3,elev+elevOff+jy+tiltElS));
+  const azz=az+jx+tiltAzS;
+
+  const cam=[dist*Math.cos(el)*Math.cos(azz), dist*Math.sin(el), dist*Math.cos(el)*Math.sin(azz)];
+  const len=Math.hypot(...cam);
+  const fwd=cam.map(c=>-c/len);
+  let right=[ -fwd[2], 0, fwd[0] ]; // cross(fwd, worldUp)
+  const rl=Math.hypot(...right)||1; right=right.map(c=>c/rl);
+  const up=[ right[1]*fwd[2]-right[2]*fwd[1], right[2]*fwd[0]-right[0]*fwd[2], right[0]*fwd[1]-right[1]*fwd[0] ];
+  const fov=.9+Math.max(0,8-dist)*.09;
+
+  // star on an inclined orbit
+  const sa=simTime*.32, sr=7.2, tilt=1.15;
+  const star=[sr*Math.cos(sa), sr*Math.sin(sa)*Math.sin(tilt), sr*Math.sin(sa)*Math.cos(tilt)];
+
+  mouse.str+=((fx.lens?mouse.target:0)-mouse.str)*Math.min(1,dt*4);
+
+  // 1) scene
+  const S=P_SCENE; gl.useProgram(S.pr);
+  gl.uniform2f(S.u.uRes,tScene.w,tScene.h);
+  gl.uniform1f(S.u.uTime,simTime);
+  gl.uniform3fv(S.u.uCam,cam); gl.uniform3fv(S.u.uFwd,fwd); gl.uniform3fv(S.u.uRight,right); gl.uniform3fv(S.u.uUp,up);
+  gl.uniform1f(S.u.uFov,fov);
+  gl.uniform3fv(S.u.uStar,star); gl.uniform1f(S.u.uStarOn,fx.star?1:0);
+  gl.uniform1f(S.u.uJet,fx.jets?1:0); gl.uniform1f(S.u.uSpots,fx.spots?1:0);
+  gl.uniform3f(S.u.uMouse,mouse.x,mouse.y,lensSize*mouse.str);
+  gl.uniform1f(S.u.uSteps,STEPS);
+  // tall phone screen: lift the hole into the upper part so the cards below don't cover it
+  const portrait=tScene.h>tScene.w*1.3;
+  offY+=((portrait&&progress>.06&&!inside?-.16:0)-offY)*Math.min(1,dt*2.5);
+  gl.uniform1f(S.u.uOffY,offY);
+  const rip=new Float32Array(12).fill(-100);
+  ripples.forEach((r,i)=>{rip[i*3]=r[0];rip[i*3+1]=r[1];rip[i*3+2]=r[2];});
+  gl.uniform3fv(S.u.uRip,rip);
+  pass(tScene);
+
+  // 2) bloom
+  if(fx.bloom){
+    gl.useProgram(P_BRIGHT.pr); bindTex(0,tScene.tex); gl.uniform1i(P_BRIGHT.u.uTex,0); gl.uniform2f(P_BRIGHT.u.uRes,tA.w,tA.h); pass(tA);
+    gl.useProgram(P_BLUR.pr); gl.uniform1i(P_BLUR.u.uTex,0); gl.uniform2f(P_BLUR.u.uRes,tA.w,tA.h);
+    for(const sp of [1,2.2]){
+      bindTex(0,tA.tex); gl.uniform2f(P_BLUR.u.uDir,sp,0); pass(tB);
+      bindTex(0,tB.tex); gl.uniform2f(P_BLUR.u.uDir,0,sp); pass(tA);
+    }
+  }
+
+  // 3) composite
+  const ld=Math.log(dist); const spd=Math.abs(ld-logDistPrev)/Math.max(dt,1e-3); logDistPrev=ld;
+  speedS+=(spd-speedS)*Math.min(1,dt*6);
+  const plunge=Math.max(0,Math.min(1,(1.004-dist)/(1.004-1.0002)));
+  const near=Math.max(0,Math.min(1,(3-dist)/2));
+  const C=P_COMP; gl.useProgram(C.pr);
+  bindTex(0,tScene.tex); bindTex(1,tA.tex);
+  gl.uniform1i(C.u.uScene,0); gl.uniform1i(C.u.uBloom,1);
+  gl.uniform2f(C.u.uRes,canvas.width,canvas.height);
+  gl.uniform1f(C.u.uTime,simTime);
+  gl.uniform1f(C.u.uCA,fx.warp?Math.min(.03,.004+speedS*.01+near*.012+kick*.02):0);
+  gl.uniform1f(C.u.uRad,fx.warp?Math.min(.35,speedS*.12+near*.05+plunge*.3):0);
+  gl.uniform1f(C.u.uBloomK,fx.bloom?1.25:0);
+  gl.uniform1f(C.u.uPlunge,plunge);
+  pass(null);
+
+  // HUD
+  const dil=1/Math.sqrt(Math.max(1e-9,1-1/dist));
+  if(!inside){ myT+=dt; earthT+=dt*dil; }
+  $('hDist').textContent=fmtKm(dist*RS_KM);
+  $('hRs').textContent=dist.toFixed(dist<1.1?4:2).replace('.',',');
+  $('hDil').textContent=fmtDil(dil)+' Земли';
+  $('hMe').textContent=fmtTime(myT);
+  $('hEarth').textContent=fmtTime(earthT);
+  $('hEsc').textContent=Math.round(Math.sqrt(Math.min(1,1/dist))*100)+'% c';
+  $('hBar').style.width=(progress*100).toFixed(1)+'%';
+
+  veil.style.opacity=plunge.toFixed(3);
+  if(dist<1.0004 && progress>.97) enterInside();
+  else if(progress<.9) leaveInside();
+  if(inside) drawInside(dt);
+
+  updateTitle();
+  updateSound(dist);
+
+  // adaptive resolution
+  frames++; acc+=dt;
+  if(acc>1.2){
+    const fps=frames/acc; frames=0; acc=0;
+    $('hRays').textContent=fmtBig(fps*tScene.w*tScene.h);
+    if(fps<40&&scale>MIN_SCALE){scale*=.85;resize();}
+    else if(fps>58&&scale<Math.min(1,devicePixelRatio||1)){scale=Math.min(1,scale*1.1);resize();}
+  }
+  if(!booted&&now-bootAt>600){booted=true;boot.classList.add('gone');}
+  requestAnimationFrame(frame);
+}
+document.fonts.ready.then(()=>{ resize(); });
+resize();
+requestAnimationFrame(frame);
+setTimeout(()=>{ $('dragtip').style.opacity=0; },10000);
+if(params.has('wave')) setTimeout(()=>fireWave(innerWidth*.3,innerHeight*.4),200);
+if(params.has('mouse')) { const [u,v]=toUV(innerWidth*.72,innerHeight*.3); mouse.x=u; mouse.y=v; mouse.target=1; mouse.str=1; }
+})();
+</script>
+</body>
+</html>
